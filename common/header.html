@@ -6,100 +6,111 @@
 
   api.createWidget('category-header-widget', {
       tagName: 'span',
+      
       html(attrs, state) {
-
           const path = window.location.pathname;
-          let category;
-
           const service = api.container.lookup('service:discovery');
-          category = service.get("category");
+          const category = service.get("category");
           const siteSettings = this.siteSettings;
-
           const isException = category && settings.hide_category_exceptions.split("|").includes(category.name);
 
-          if(/^\/c\//.test(path)) {
+          if (/^\/c\//.test(path) && !isException && category) {
               const hideMobile = !settings.show_mobile && this.site.mobileView;
               const subCat = !settings.show_subcategory_header && category.parentCategory;
               const noDesc = !settings.hide_if_no_category_description && !category.description_text;
-              
-              if(!isException && !noDesc && !subCat && !hideMobile) {
+
+              if (!noDesc && !subCat && !hideMobile) {
                   $("body").addClass("category-header");
-                  //list-controls
-                  
-                  function ifParentCategory(){
-                    if (category.parentCategory) {
-                        return h('a.parent-box-link',{"attributes" : {"href" : category.parentCategory.url}}, h('h1',category.parentCategory.name + ": "));
-                    }
+
+                  // Fetch the topic ID for the description if not already fetched
+                  if (!state.descriptionTopicId) {
+                      this._fetchCategoryDescriptionTopicId(category.id).then(descriptionTopicId => {
+                          if (descriptionTopicId) {
+                              state.descriptionTopicId = descriptionTopicId;
+                              this.scheduleRerender();
+                          }
+                      });
+                      return h('div.loading', 'Loading...');
+                  }
+
+                  function ifParentCategory() {
+                      if (category.parentCategory) {
+                          return h('a.parent-box-link', {"attributes": {"href": category.parentCategory.url}}, h('h1', category.parentCategory.name + ": "));
+                      }
                   }
 
                   function catDesc() {
                       if (settings.show_category_description) {
-                          // Assuming category.description_topic_id contains the ID of the topic from which the description is generated
-                          const readMoreLink = `/t/${category.description_topic_id}`;
+                          const readMoreLink = `/t/${state.descriptionTopicId}`;
                           const descriptionHTML = `${category.description} <a href="${readMoreLink}" class="read-more-link">... read more</a>`;
-                          
                           return h('div.cooked', {innerHTML: descriptionHTML});
                       }
                   }
-                  
+
                   function logoImg() {
-                     if(settings.show_category_logo && category.uploaded_logo){
-                        return [h('img',{"attributes" : {"src" : category.uploaded_logo.url}})];
-                     } else if (settings.show_category_logo && settings.show_parent_category_logo && category.parentCategory && category.parentCategory.uploaded_logo) {
-                        return [h('img',{"attributes" : {"src" : category.parentCategory.uploaded_logo.url}})];                        
-                     } else if (settings.show_site_logo && siteSettings.logo_small) {
-                        return [h('img',{"attributes" : {"src" : siteSettings.logo_small}})];
-                     }
+                      if (settings.show_category_logo && category.uploaded_logo) {
+                          return [h('img', {"attributes": {"src": category.uploaded_logo.url}})];
+                      } else if (settings.show_category_logo && settings.show_parent_category_logo && category.parentCategory && category.parentCategory.uploaded_logo) {
+                          return [h('img', {"attributes": {"src": category.parentCategory.uploaded_logo.url}})];
+                      } else if (settings.show_site_logo && siteSettings.logo_small) {
+                          return [h('img', {"attributes": {"src": siteSettings.logo_small}})];
+                      }
                   }
-                  
+
                   function ifParentProtected() {
-                      if(category.parentCategory && category.parentCategory.read_restricted) {
+                      if (category.parentCategory && category.parentCategory.read_restricted) {
                           return lockIcon;
                       }
-                  }                  
+                  }
 
                   function ifProtected() {
-                      if(category.read_restricted) {
+                      if (category.read_restricted) {
                           return lockIcon;
                       }
                   }
-                  
+
                   function getHeaderStyle() {
                       let headerStyle = "";
-                      if(settings.header_style == "box"){
-                        headerStyle += "border-left: 6px solid #" + category.color + ";"
+                      if (settings.header_style === "box") {
+                          headerStyle += "border-left: 6px solid #" + category.color + ";";
                       }
-                      if(settings.header_style == "banner"){
-                        headerStyle += "background-color: #" + category.color + "; color: #" + category.text_color + ";"
+                      if (settings.header_style === "banner") {
+                          headerStyle += "background-color: #" + category.color + "; color: #" + category.text_color + ";";
                       }
-                      if(category.uploaded_background){
-                          if(settings.header_background_image != "outside"){
-                                headerStyle += "background-image: url(" + category.uploaded_background.url + ");" 
-                         }
+                      if (category.uploaded_background) {
+                          if (settings.header_background_image !== "outside") {
+                              headerStyle += "background-image: url(" + category.uploaded_background.url + ");";
+                          }
                       }
                       return headerStyle;
                   }
-                  
+
                   return h('div.category-title-header' + " .category-banner-" + category.slug, {
-                      "attributes" : {
-                          "style" : getHeaderStyle()
+                      "attributes": {
+                          "style": getHeaderStyle()
                       }
-                  }, h('div.category-title-contents', [ 
-                  h('div.category-logo.aspect-image', logoImg()), 
-                  h('div.category-title-name', [
-                  ifParentProtected(),                      
-                  ifParentCategory(),                      
-                  ifProtected(),
-                  h('h1', category.name)
-                  ]),
-                  h('div.category-title-description',catDesc())
-                  ]),
-                  );
+                  }, h('div.category-title-contents', [
+                      h('div.category-logo.aspect-image', logoImg()),
+                      h('div.category-title-name', [
+                          ifParentProtected(),
+                          ifParentCategory(),
+                          ifProtected(),
+                          h('h1', category.name)
+                      ]),
+                      h('div.category-title-description', catDesc())
+                  ]));
               }
           } else {
               $("body").removeClass("category-header");
           }
-      }
+      },
+
+      _fetchCategoryDescriptionTopicId(categoryId) {
+          return fetch(`/categories/${categoryId}.json`).then(response => response.json()).then(data => {
+              return data.topic_url ? data.topic_url.split('/')[2] : null;  // Extract topic ID from topic URL
+          }).catch(() => null);
+      },
+
   }),
 
   api.decorateWidget('category-header-widget:after', helper => {
@@ -107,10 +118,10 @@
           helper.widget.scheduleRerender();
       });
   });
-  
+
 </script>
-<script type="text/x-handlebars" 
-  type="text/x-handlebars"
+
+<script type="text/x-handlebars"
   data-template-name="/connectors/above-main-container/category-header-widget"
 >
   {{mount-widget widget="category-header-widget"}}
