@@ -33,8 +33,12 @@
                   }
 
                   function catDesc() {
-                      if(settings.show_category_description) {
-                          return h('div.cooked', {innerHTML: category.description});
+                      if (settings.show_category_description) {
+                          // Assuming category.description_topic_id contains the ID of the topic from which the description is generated
+                          const readMoreLink = `/t/${category.description_topic_id}`;
+                          const descriptionHTML = `${category.description} <a href="${readMoreLink}" class="read-more-link">... read more</a>`;
+                          
+                          return h('div.cooked', {innerHTML: descriptionHTML});
                       }
                   }
                   
